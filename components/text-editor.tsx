@@ -61,7 +61,7 @@ export function TextEditor() {
 
   const getTextStyle = () => {
     return {
-      fontWeight: style.bold ? "bold" : "normal",
+      fontWeight: style.bold ? "bold" : "500",
       fontStyle: style.italic ? "italic" : "normal",
       textDecoration: style.underline ? "underline" : "none",
       fontSize: `${style.fontSize}px`,
@@ -357,9 +357,9 @@ export function TextEditor() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[600px]">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[1000px]">
         {/* Text Editor */}
-        <Card className="p-6 bg-white/95 backdrop-blur-sm border-white/20 shadow-xl">
+        <Card className="p-6 bg-white/60 backdrop-blur-sm border-white/20 shadow-xl">
           <h3 className="text-xl font-bold mb-4 gradient-text">Editor</h3>
           <textarea
             value={text}
@@ -375,7 +375,7 @@ export function TextEditor() {
         </Card>
 
         {/* Preview */}
-        <Card className="p-6 bg-white/95 backdrop-blur-sm border-white/20 shadow-xl">
+        <Card className="p-6 bg-white/60 backdrop-blur-sm border-white/20 shadow-xl">
           <h3 className="text-xl font-bold mb-4 gradient-text">Preview</h3>
           <div
             className="h-full overflow-auto rounded-lg border-2 border-dashed border-purple-300 p-6 bg-white/50"
