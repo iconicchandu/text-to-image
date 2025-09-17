@@ -137,37 +137,37 @@ export function TextEditor() {
       if (style.align === 'justify' && index < wrappedLines.length - 1 && line.trim() !== '') {
         const words = line.split(' ');
         if (words.length > 1) {
-            const totalWordsWidth = words.reduce((acc, word) => acc + ctx.measureText(word).width, 0);
-            const totalSpacing = availableWidth - totalWordsWidth;
+          const totalWordsWidth = words.reduce((acc, word) => acc + ctx.measureText(word).width, 0);
+          const totalSpacing = availableWidth - totalWordsWidth;
+
+          // ✅ Only justify if the line is wide enough (e.g., > 80% of available width)
+          if (textWidth / availableWidth > 0.8) {
             const spaceWidth = totalSpacing / (words.length - 1);
-
             let currentX = 0;
+
             words.forEach((word) => {
-                ctx.fillText(word, currentX, y);
+              ctx.fillText(word, currentX, y);
 
-                if (style.underline) {
-                    const wordWidth = ctx.measureText(word).width
-                    ctx.beginPath()
-                    ctx.moveTo(currentX, y + style.fontSize + 2)
-                    ctx.lineTo(currentX + wordWidth, y + style.fontSize + 2)
-                    ctx.strokeStyle = style.color
-                    ctx.lineWidth = 1
-                    ctx.stroke()
-                }
+              if (style.underline) {
+                const wordWidth = ctx.measureText(word).width;
+                ctx.beginPath();
+                ctx.moveTo(currentX, y + style.fontSize + 2);
+                ctx.lineTo(currentX + wordWidth, y + style.fontSize + 2);
+                ctx.strokeStyle = style.color;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+              }
 
-                currentX += ctx.measureText(word).width + spaceWidth;
+              currentX += ctx.measureText(word).width + spaceWidth;
             });
-        } else {
+          } else {
+            // Fallback: left align short lines
             ctx.fillText(line, 0, y);
-             if (style.underline) {
-                ctx.beginPath()
-                ctx.moveTo(0, y + style.fontSize + 2)
-                ctx.lineTo(textWidth, y + style.fontSize + 2)
-                ctx.strokeStyle = style.color
-                ctx.lineWidth = 1
-                ctx.stroke()
-            }
+          }
+        } else {
+          ctx.fillText(line, 0, y);
         }
+
       } else {
         let x = 0
         if (style.align === "center") {
@@ -176,13 +176,13 @@ export function TextEditor() {
           x = availableWidth - textWidth
         }
         ctx.fillText(line, x, y)
-         if (style.underline) {
-            ctx.beginPath()
-            ctx.moveTo(x, y + style.fontSize + 2)
-            ctx.lineTo(x + textWidth, y + style.fontSize + 2)
-            ctx.strokeStyle = style.color
-            ctx.lineWidth = 1
-            ctx.stroke()
+        if (style.underline) {
+          ctx.beginPath()
+          ctx.moveTo(x, y + style.fontSize + 2)
+          ctx.lineTo(x + textWidth, y + style.fontSize + 2)
+          ctx.strokeStyle = style.color
+          ctx.lineWidth = 1
+          ctx.stroke()
         }
       }
     })
@@ -211,11 +211,10 @@ export function TextEditor() {
               variant={style.bold ? "default" : "outline"}
               size="sm"
               onClick={() => toggleStyle("bold")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${
-                style.bold
+              className={`h-10 w-10 p-0 transition-all duration-200 ${style.bold
                   ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
                   : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
-              }`}
+                }`}
             >
               <Bold className="h-4 w-4" />
             </Button>
@@ -223,11 +222,10 @@ export function TextEditor() {
               variant={style.italic ? "default" : "outline"}
               size="sm"
               onClick={() => toggleStyle("italic")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${
-                style.italic
+              className={`h-10 w-10 p-0 transition-all duration-200 ${style.italic
                   ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
                   : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
-              }`}
+                }`}
             >
               <Italic className="h-4 w-4" />
             </Button>
@@ -235,11 +233,10 @@ export function TextEditor() {
               variant={style.underline ? "default" : "outline"}
               size="sm"
               onClick={() => toggleStyle("underline")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${
-                style.underline
+              className={`h-10 w-10 p-0 transition-all duration-200 ${style.underline
                   ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
                   : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
-              }`}
+                }`}
             >
               <Underline className="h-4 w-4" />
             </Button>
@@ -278,11 +275,10 @@ export function TextEditor() {
               variant={style.align === "left" ? "default" : "outline"}
               size="sm"
               onClick={() => setAlignment("left")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${
-                style.align === "left"
+              className={`h-10 w-10 p-0 transition-all duration-200 ${style.align === "left"
                   ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
                   : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
-              }`}
+                }`}
             >
               <AlignLeft className="h-4 w-4" />
             </Button>
@@ -290,11 +286,10 @@ export function TextEditor() {
               variant={style.align === "center" ? "default" : "outline"}
               size="sm"
               onClick={() => setAlignment("center")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${
-                style.align === "center"
+              className={`h-10 w-10 p-0 transition-all duration-200 ${style.align === "center"
                   ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
                   : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
-              }`}
+                }`}
             >
               <AlignCenter className="h-4 w-4" />
             </Button>
@@ -302,11 +297,10 @@ export function TextEditor() {
               variant={style.align === "right" ? "default" : "outline"}
               size="sm"
               onClick={() => setAlignment("right")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${
-                style.align === "right"
+              className={`h-10 w-10 p-0 transition-all duration-200 ${style.align === "right"
                   ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
                   : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
-              }`}
+                }`}
             >
               <AlignRight className="h-4 w-4" />
             </Button>
@@ -314,11 +308,10 @@ export function TextEditor() {
               variant={style.align === "justify" ? "default" : "outline"}
               size="sm"
               onClick={() => setAlignment("justify")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${
-                style.align === "justify"
+              className={`h-10 w-10 p-0 transition-all duration-200 ${style.align === "justify"
                   ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
                   : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
-              }`}
+                }`}
             >
               <AlignJustify className="h-4 w-4" />
             </Button>
