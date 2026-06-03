@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -15,382 +15,538 @@ import {
   AlignJustify,
   Download,
   Palette,
+  Minus,
+  Plus,
 } from "lucide-react"
 
-interface TextStyle {
-  bold: boolean
-  italic: boolean
-  underline: boolean
-  fontSize: number
-  color: string
-  align: "left" | "center" | "right" | "justify"
-}
+const PRESET_COLORS = [
+  { name: "Ink", value: "#09090b" },
+  { name: "Slate", value: "#64748b" },
+  { name: "Indigo", value: "#4f46e5" },
+  { name: "Emerald", value: "#059669" },
+  { name: "Crimson", value: "#dc2626" },
+  { name: "Amber", value: "#d97706" }
+]
 
 export function TextEditor() {
-  const [text, setText] = useState("")
+  const [html, setHtml] = useState("")
+  const [plainText, setPlainText] = useState("")
   const [title, setTitle] = useState("")
-  const [style, setStyle] = useState<TextStyle>({
+  const [activeStyles, setActiveStyles] = useState({
     bold: false,
     italic: false,
     underline: false,
-    fontSize: 11,
+    align: "left" as "left" | "center" | "right" | "justify",
     color: "#737373",
-    align: "left",
+    fontSize: 11,
   })
 
+  const editorRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const toggleStyle = (property: keyof Pick<TextStyle, "bold" | "italic" | "underline">) => {
-    setStyle((prev) => ({ ...prev, [property]: !prev[property] }))
-  }
-
-  const setAlignment = (align: TextStyle["align"]) => {
-    setStyle((prev) => ({ ...prev, align }))
-  }
-
-  const changeFontSize = (delta: number) => {
-    setStyle((prev) => ({
-      ...prev,
-      fontSize: Math.max(8, Math.min(72, prev.fontSize + delta)),
-    }))
-  }
-
-  const changeColor = (color: string) => {
-    setStyle((prev) => ({ ...prev, color }))
-  }
-
-  const getTextStyle = () => {
-    return {
-      fontWeight: style.bold ? "bold" : "500",
-      fontStyle: style.italic ? "italic" : "normal",
-      textDecoration: style.underline ? "underline" : "none",
-      fontSize: `${style.fontSize}px`,
-      color: style.color,
-      textAlign: style.align as any,
-      lineHeight: "1.5",
-      fontFamily: "system-ui, -apple-system, sans-serif",
+  // Sync state values on input
+  const handleInput = () => {
+    if (editorRef.current) {
+      setHtml(editorRef.current.innerHTML)
+      setPlainText(editorRef.current.innerText || "")
     }
   }
 
-  const downloadAsPNG = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !text.trim()) return
+  // Format selections using execCommand
+  const toggleStyle = (property: "bold" | "italic" | "underline") => {
+    if (editorRef.current && document.activeElement !== editorRef.current) {
+      editorRef.current.focus()
+    }
+    document.execCommand(property, false)
+    updateToolbarFromSelection()
+    handleInput()
+  }
 
+  const setAlignment = (align: "left" | "center" | "right" | "justify") => {
+    if (editorRef.current && document.activeElement !== editorRef.current) {
+      editorRef.current.focus()
+    }
+    if (align === "left") document.execCommand("justifyLeft", false)
+    else if (align === "center") document.execCommand("justifyCenter", false)
+    else if (align === "right") document.execCommand("justifyRight", false)
+    else if (align === "justify") document.execCommand("justifyFull", false)
+    updateToolbarFromSelection()
+    handleInput()
+  }
+
+  const changeColor = (color: string) => {
+    if (editorRef.current && document.activeElement !== editorRef.current) {
+      editorRef.current.focus()
+    }
+    document.execCommand("foreColor", false, color)
+    updateToolbarFromSelection()
+    handleInput()
+  }
+
+  const changeFontSize = (delta: number) => {
+    if (editorRef.current && document.activeElement !== editorRef.current) {
+      editorRef.current.focus()
+    }
+    const newSize = Math.max(8, Math.min(72, activeStyles.fontSize + delta))
+
+    const selection = window.getSelection()
+    if (selection && selection.rangeCount > 0 && !selection.getRangeAt(0).collapsed) {
+      const range = selection.getRangeAt(0)
+      const span = document.createElement("span")
+      span.style.fontSize = `${newSize}px`
+
+      try {
+        span.appendChild(range.extractContents())
+        range.insertNode(span)
+
+        // Reselect wrapped contents
+        selection.removeAllRanges()
+        const newRange = document.createRange()
+        newRange.selectNodeContents(span)
+        selection.addRange(newRange)
+      } catch (e) {
+        console.error(e)
+      }
+    }
+
+    setActiveStyles(prev => ({ ...prev, fontSize: newSize }))
+    handleInput()
+  }
+
+  // Update button active state from selection
+  const updateToolbarFromSelection = useCallback(() => {
+    if (typeof window === "undefined" || !editorRef.current) return
+
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+
+    const anchorNode = selection.anchorNode
+    if (!anchorNode || !editorRef.current.contains(anchorNode)) return
+
+    const bold = document.queryCommandState("bold")
+    const italic = document.queryCommandState("italic")
+    const underline = document.queryCommandState("underline")
+
+    let align: "left" | "center" | "right" | "justify" = "left"
+    if (document.queryCommandState("justifyCenter")) align = "center"
+    else if (document.queryCommandState("justifyRight")) align = "right"
+    else if (document.queryCommandState("justifyFull")) align = "justify"
+
+    let color = "#737373"
+    try {
+      const queriedColor = document.queryCommandValue("foreColor")
+      if (queriedColor) {
+        color = queriedColor
+      }
+    } catch (e) { }
+
+    let fontSize = 11
+    try {
+      let node = anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode as HTMLElement
+      if (node) {
+        const computedStyle = window.getComputedStyle(node)
+        fontSize = Math.round(parseFloat(computedStyle.fontSize))
+      }
+    } catch (e) { }
+
+    setActiveStyles({
+      bold,
+      italic,
+      underline,
+      align,
+      color,
+      fontSize,
+    })
+  }, [])
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      updateToolbarFromSelection()
+    }
+    document.addEventListener("selectionchange", handleSelectionChange)
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange)
+    }
+  }, [updateToolbarFromSelection])
+
+  // Download high-resolution PNG using SVG foreignObject to preserve all HTML/CSS styles
+  const downloadAsPNG = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor) return
+
+    const htmlContent = editor.innerHTML
+    if (!htmlContent || htmlContent.trim() === "" || htmlContent === "<br>") return
+
+    const computed = window.getComputedStyle(editor)
+    const paddingLeft = parseFloat(computed.paddingLeft || "0")
+    const paddingRight = parseFloat(computed.paddingRight || "0")
+    const paddingTop = parseFloat(computed.paddingTop || "0")
+    const paddingBottom = parseFloat(computed.paddingBottom || "0")
+
+    const exportWidth = Math.ceil(Math.max(1, (editor.clientWidth || 600) - paddingLeft - paddingRight))
+    const exportHeight = Math.ceil(Math.max(1, (editor.scrollHeight || 400) - paddingTop - paddingBottom))
+    const dpr = 3 // 3x output scale for premium high-resolution quality
+
+    const canvas = canvasRef.current
+    if (!canvas) return
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    const dpr = (window.devicePixelRatio || 1) * 4
-    const previewContainerWidth = 600
-    const padding = 24
-    const availableWidth = previewContainerWidth - padding * 2
-
-    const font = `${style.italic ? "italic " : ""}${style.bold ? "bold " : ""}${style.fontSize}px system-ui, -apple-system, sans-serif`
-    ctx.font = font
-
-    const lineHeight = style.fontSize * 1.5
-    const paragraphs = text.split('\n')
-    const wrappedLines: string[] = []
-
-    paragraphs.forEach(paragraph => {
-      if (paragraph.trim() === '') {
-        wrappedLines.push('')
-      } else {
-        const words = paragraph.split(' ')
-        let currentLine = words[0] || ''
-
-        for (let i = 1; i < words.length; i++) {
-          const word = words[i]
-          const testLine = `${currentLine} ${word}`
-          const metrics = ctx.measureText(testLine)
-          if (metrics.width > availableWidth && currentLine.length > 0) {
-            wrappedLines.push(currentLine)
-            currentLine = word
-          } else {
-            currentLine = testLine
-          }
-        }
-        wrappedLines.push(currentLine)
-      }
-    })
-
-    const textHeight = wrappedLines.length * lineHeight
-
-    const canvasWidth = Math.ceil(availableWidth)
-    const canvasHeight = Math.ceil(textHeight - (lineHeight - style.fontSize))
-
-    canvas.width = canvasWidth * dpr
-    canvas.height = canvasHeight * dpr
-    canvas.style.width = `${canvasWidth}px`
-    canvas.style.height = `${canvasHeight}px`
+    canvas.width = exportWidth * dpr
+    canvas.height = exportHeight * dpr
+    canvas.style.width = `${exportWidth}px`
+    canvas.style.height = `${exportHeight}px`
 
     ctx.scale(dpr, dpr)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    ctx.font = font
-    ctx.fillStyle = style.color
-    ctx.textBaseline = "top"
+    // Clone the editor node to serialize safely as strict XML XHTML
+    const clone = editor.cloneNode(true) as HTMLDivElement
+    clone.removeAttribute("class")
+    clone.removeAttribute("id")
+    clone.removeAttribute("contenteditable")
+    clone.removeAttribute("placeholder")
+    clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml")
 
-    wrappedLines.forEach((line, index) => {
-      const y = index * lineHeight
-      const textWidth = ctx.measureText(line).width
+    // Set custom clean styling on cloned wrapper
+    clone.style.cssText = "font-family: system-ui, -apple-system, sans-serif; font-size: 11px; color: #737373; line-height: 21px; word-wrap: break-word; white-space: pre-wrap; width: 100%; height: 100%; box-sizing: border-box; background: transparent; padding: 0; margin: 0;"
 
-      if (style.align === 'justify' && index < wrappedLines.length - 1 && line.trim() !== '') {
-        const words = line.split(' ');
-        if (words.length > 1) {
-          const totalWordsWidth = words.reduce((acc, word) => acc + ctx.measureText(word).width, 0);
-          const totalSpacing = availableWidth - totalWordsWidth;
+    // Inject style reset inside clone to force transparency on all elements and strip pasted backgrounds
+    const styleEl = document.createElement("style")
+    styleEl.textContent = "* { background: transparent !important; background-color: transparent !important; margin: 0; padding: 0; }"
+    clone.insertBefore(styleEl, clone.firstChild)
 
-          // ✅ Only justify if the line is wide enough (e.g., > 80% of available width)
-          if (textWidth / availableWidth > 0.8) {
-            const spaceWidth = totalSpacing / (words.length - 1);
-            let currentX = 0;
+    const serializer = new XMLSerializer()
+    const xmlContent = serializer.serializeToString(clone)
 
-            words.forEach((word) => {
-              ctx.fillText(word, currentX, y);
+    // Assemble the SVG with transparent background and no padding
+    const svgString = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${exportWidth}" height="${exportHeight}">
+        <foreignObject width="100%" height="100%">
+          ${xmlContent}
+        </foreignObject>
+      </svg>
+    `
 
-              if (style.underline) {
-                const wordWidth = ctx.measureText(word).width;
-                ctx.beginPath();
-                ctx.moveTo(currentX, y + style.fontSize + 2);
-                ctx.lineTo(currentX + wordWidth, y + style.fontSize + 2);
-                ctx.strokeStyle = style.color;
-                ctx.lineWidth = 1;
-                ctx.stroke();
-              }
+    const img = new Image()
+    img.crossOrigin = "anonymous"
 
-              currentX += ctx.measureText(word).width + spaceWidth;
-            });
-          } else {
-            // Fallback: left align short lines
-            ctx.fillText(line, 0, y);
+    // Convert SVG string to base64 Data URL to prevent tainted canvas issue
+    const base64Svg = window.btoa(unescape(encodeURIComponent(svgString)))
+    const dataUrl = `data:image/svg+xml;base64,${base64Svg}`
+
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, exportWidth, exportHeight)
+
+      try {
+        // Read pixels to calculate precise text bounding box and crop extra space
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const data = imgData.data
+        let minX = canvas.width
+        let minY = canvas.height
+        let maxX = 0
+        let maxY = 0
+        let found = false
+
+        for (let y = 0; y < canvas.height; y++) {
+          for (let x = 0; x < canvas.width; x++) {
+            const alpha = data[(y * canvas.width + x) * 4 + 3]
+            if (alpha > 0) {
+              if (x < minX) minX = x
+              if (x > maxX) maxX = x
+              if (y < minY) minY = y
+              if (y > maxY) maxY = y
+              found = true
+            }
           }
-        } else {
-          ctx.fillText(line, 0, y);
         }
 
-      } else {
-        let x = 0
-        if (style.align === "center") {
-          x = (availableWidth - textWidth) / 2
-        } else if (style.align === "right") {
-          x = availableWidth - textWidth
-        }
-        ctx.fillText(line, x, y)
-        if (style.underline) {
-          ctx.beginPath()
-          ctx.moveTo(x, y + style.fontSize + 2)
-          ctx.lineTo(x + textWidth, y + style.fontSize + 2)
-          ctx.strokeStyle = style.color
-          ctx.lineWidth = 1
-          ctx.stroke()
-        }
-      }
-    })
+        let exportCanvas = canvas
 
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url
-        a.download = title ? `${title}.png` : "text-editor-export.png"
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
+        if (found) {
+          // Add a small safety padding around the text
+          const padding = 12
+          const cropMinX = Math.max(0, minX - padding)
+          const cropMinY = Math.max(0, minY - padding)
+          const cropMaxX = Math.min(canvas.width - 1, maxX + padding)
+          const cropMaxY = Math.min(canvas.height - 1, maxY + padding)
+
+          const cropWidth = cropMaxX - cropMinX + 1
+          const cropHeight = cropMaxY - cropMinY + 1
+
+          const cropCanvas = document.createElement("canvas")
+          cropCanvas.width = cropWidth
+          cropCanvas.height = cropHeight
+          const cropCtx = cropCanvas.getContext("2d")
+          if (cropCtx) {
+            cropCtx.drawImage(canvas, cropMinX, cropMinY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+            exportCanvas = cropCanvas
+          }
+        }
+
+        exportCanvas.toBlob((blob) => {
+          if (blob) {
+            const downloadUrl = URL.createObjectURL(blob)
+            const a = document.createElement("a")
+            a.href = downloadUrl
+            a.download = title ? `${title}.png` : "text-editor-export.png"
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(downloadUrl)
+          }
+        }, "image/png")
+      } catch (err) {
+        console.error("Failed to export image due to tainted canvas or crop error", err)
       }
-    }, "image/png")
-  }, [text, style, title])
+    }
+
+    img.onerror = (err) => {
+      console.error("Error loading SVG image inside canvas", err)
+    }
+
+    img.src = dataUrl
+  }, [title])
+
+  const chars = plainText.length
+  const words = plainText.trim() === "" ? 0 : plainText.trim().split(/\s+/).length
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-6">
-      <Card className="p-6 bg-white/95 backdrop-blur-sm border-white/20 shadow-xl">
+    <div className="w-full flex-1 flex flex-col min-h-0 gap-4">
+      <Card className="p-4 bg-white border border-zinc-200/80 shadow-xs rounded-xl shrink-0">
         <div className="flex flex-wrap items-center gap-3">
           {/* Text Formatting */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Button
-              variant={style.bold ? "default" : "outline"}
+              variant="outline"
               size="sm"
               onClick={() => toggleStyle("bold")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${style.bold
-                  ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
-                  : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
+              className={`h-9 w-9 p-0 transition-all duration-200 rounded-md ${activeStyles.bold
+                ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 shadow-xs"
+                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
             >
               <Bold className="h-4 w-4" />
             </Button>
             <Button
-              variant={style.italic ? "default" : "outline"}
+              variant="outline"
               size="sm"
               onClick={() => toggleStyle("italic")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${style.italic
-                  ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
-                  : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
+              className={`h-9 w-9 p-0 transition-all duration-200 rounded-md ${activeStyles.italic
+                ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 shadow-xs"
+                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
             >
               <Italic className="h-4 w-4" />
             </Button>
             <Button
-              variant={style.underline ? "default" : "outline"}
+              variant="outline"
               size="sm"
               onClick={() => toggleStyle("underline")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${style.underline
-                  ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
-                  : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
+              className={`h-9 w-9 p-0 transition-all duration-200 rounded-md ${activeStyles.underline
+                ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 shadow-xs"
+                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
             >
               <Underline className="h-4 w-4" />
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-8 bg-gradient-to-b from-pink-200 to-purple-200" />
+          <Separator orientation="vertical" className="h-6 bg-zinc-200" />
 
           {/* Font Size */}
-          <div className="flex items-center gap-2 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-1 border border-pink-200">
+          <div className="flex items-center gap-1.5 bg-zinc-50 rounded-md p-1 border border-zinc-200 h-9">
             <Button
               variant="outline"
               size="sm"
               onClick={() => changeFontSize(-1)}
-              className="h-8 w-8 p-0 hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200 transition-all duration-200"
+              className="h-7 w-7 p-0 border-0 hover:bg-zinc-200/60 bg-transparent text-zinc-600 hover:text-zinc-900 transition-all flex items-center justify-center"
             >
-              -
+              <Minus className="h-3.5 w-3.5" />
             </Button>
-            <span className="text-sm font-semibold min-w-[3.5rem] text-center px-2 py-1 bg-white rounded border border-pink-200">
-              {style.fontSize}px
+            <span className="text-xs font-semibold min-w-[2.5rem] text-center px-1 py-0.5 bg-white rounded border border-zinc-200 text-zinc-800">
+              {activeStyles.fontSize}px
             </span>
             <Button
               variant="outline"
               size="sm"
               onClick={() => changeFontSize(1)}
-              className="h-8 w-8 p-0 hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200 transition-all duration-200"
+              className="h-7 w-7 p-0 border-0 hover:bg-zinc-200/60 bg-transparent text-zinc-600 hover:text-zinc-900 transition-all flex items-center justify-center"
             >
-              +
+              <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-8 bg-gradient-to-b from-pink-200 to-purple-200" />
+          <Separator orientation="vertical" className="h-6 bg-zinc-200" />
 
           {/* Alignment */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Button
-              variant={style.align === "left" ? "default" : "outline"}
+              variant="outline"
               size="sm"
               onClick={() => setAlignment("left")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${style.align === "left"
-                  ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
-                  : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
+              className={`h-9 w-9 p-0 transition-all duration-200 rounded-md ${activeStyles.align === "left"
+                ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 shadow-xs"
+                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
             >
               <AlignLeft className="h-4 w-4" />
             </Button>
             <Button
-              variant={style.align === "center" ? "default" : "outline"}
+              variant="outline"
               size="sm"
               onClick={() => setAlignment("center")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${style.align === "center"
-                  ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
-                  : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
+              className={`h-9 w-9 p-0 transition-all duration-200 rounded-md ${activeStyles.align === "center"
+                ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 shadow-xs"
+                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
             >
               <AlignCenter className="h-4 w-4" />
             </Button>
             <Button
-              variant={style.align === "right" ? "default" : "outline"}
+              variant="outline"
               size="sm"
               onClick={() => setAlignment("right")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${style.align === "right"
-                  ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
-                  : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
+              className={`h-9 w-9 p-0 transition-all duration-200 rounded-md ${activeStyles.align === "right"
+                ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 shadow-xs"
+                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
             >
               <AlignRight className="h-4 w-4" />
             </Button>
             <Button
-              variant={style.align === "justify" ? "default" : "outline"}
+              variant="outline"
               size="sm"
               onClick={() => setAlignment("justify")}
-              className={`h-10 w-10 p-0 transition-all duration-200 ${style.align === "justify"
-                  ? "bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white shadow-lg border-0"
-                  : "hover:bg-gradient-to-r hover:from-pink-100 hover:to-purple-100 hover:border-pink-300 border-purple-200"
+              className={`h-9 w-9 p-0 transition-all duration-200 rounded-md ${activeStyles.align === "justify"
+                ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 shadow-xs"
+                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
             >
               <AlignJustify className="h-4 w-4" />
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-8 bg-gradient-to-b from-pink-200 to-purple-200" />
+          <Separator orientation="vertical" className="h-6 bg-zinc-200" />
 
-          {/* Color Picker */}
-          <div className="flex items-center gap-3 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-2 border border-pink-200">
-            <Palette className="h-4 w-4 text-purple-600" />
-            <input
-              type="color"
-              value={style.color}
-              onChange={(e) => changeColor(e.target.value)}
-              className="w-10 h-10 rounded-lg border-2 border-pink-300 shadow-md cursor-pointer hover:scale-105 transition-transform duration-200"
-            />
+          {/* Color Picker with Presets */}
+          <div className="flex items-center gap-2 bg-zinc-50 rounded-md p-1 border border-zinc-200 h-9 px-2">
+            <Palette className="h-3.5 w-3.5 text-zinc-500" />
+            <div className="flex items-center gap-1.5 border-r border-zinc-200 pr-1.5 mr-1.5">
+              {PRESET_COLORS.map((preset) => (
+                <button
+                  key={preset.value}
+                  onClick={() => changeColor(preset.value)}
+                  title={preset.name}
+                  className={`w-4 h-4 rounded-full border transition-all duration-200 hover:scale-110 cursor-pointer ${activeStyles.color.toLowerCase() === preset.value.toLowerCase()
+                    ? "border-zinc-900 ring-2 ring-zinc-900/10 scale-105"
+                    : "border-transparent"
+                    }`}
+                  style={{ backgroundColor: preset.value }}
+                />
+              ))}
+            </div>
+            <div className="relative flex items-center justify-center">
+              <input
+                type="color"
+                value={activeStyles.color}
+                onChange={(e) => changeColor(e.target.value)}
+                className="w-5 h-5 rounded-full border border-zinc-300 cursor-pointer shadow-xs overflow-hidden p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none"
+                title="Custom Color"
+              />
+            </div>
           </div>
 
-          <Separator orientation="vertical" className="h-8 bg-gradient-to-b from-pink-200 to-purple-200" />
+          <Separator orientation="vertical" className="h-6 bg-zinc-200" />
 
           {/* Title Input Field */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center h-9">
             <Input
               type="text"
               placeholder="Image title (optional)"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-48 h-10 bg-white/80 border-pink-200 focus:border-purple-400 focus:ring-purple-200 transition-all duration-200"
+              className="w-40 h-9 bg-white border-zinc-200 text-xs focus-visible:ring-zinc-950 placeholder:text-zinc-400 focus-visible:border-zinc-400"
             />
           </div>
-
-          <Separator orientation="vertical" className="h-8 bg-gradient-to-b from-pink-200 to-purple-200" />
 
           {/* Export */}
           <Button
             onClick={downloadAsPNG}
-            className="bg-gradient-to-r from-pink-400 via-purple-500 to-blue-500 hover:from-pink-500 hover:via-purple-600 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-200 px-6 h-10 border-0"
+            className="bg-zinc-900 hover:bg-zinc-800 text-white shadow-xs transition-all px-4 h-9 border-0 rounded-md font-medium text-xs sm:text-sm gap-2 ml-auto"
             size="sm"
           >
-            <Download className="h-4 w-4 mr-2" />
+            <Download className="h-4 w-4" />
             Export PNG
           </Button>
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[1000px]">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0 overflow-hidden">
         {/* Text Editor */}
-        <Card className="p-6 bg-white/60 backdrop-blur-sm border-white/20 shadow-xl">
-          <h3 className="text-xl font-bold mb-4 gradient-text">Editor</h3>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="w-full h-full resize-none border-0 outline-none bg-transparent text-foreground placeholder:text-muted-foreground focus:ring-0 rounded-lg p-4 bg-gradient-to-br from-pink-50/30 to-purple-50/30"
-            placeholder="Start typing your text here..."
+        <Card className="p-5 bg-white border border-zinc-200/80 shadow-xs flex flex-col h-full rounded-xl overflow-hidden">
+          {/* Header with macOS controls */}
+          <div className="flex items-center justify-between mb-3 shrink-0">
+            <h3 className="text-xs font-semibold tracking-wider uppercase text-zinc-400">Editor</h3>
+            <div className="flex gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-400/80"></span>
+              <span className="w-2 h-2 rounded-full bg-yellow-400/80"></span>
+              <span className="w-2 h-2 rounded-full bg-green-400/80"></span>
+            </div>
+          </div>
+          <div
+            ref={editorRef}
+            contentEditable={true}
+            onInput={handleInput}
+            className="w-full flex-1 border border-zinc-100 outline-none bg-zinc-50/20 text-zinc-600 placeholder:text-zinc-400 focus:ring-0 focus:border-zinc-200 rounded-lg p-4 transition-all overflow-y-auto min-h-[150px]"
+            {...{ placeholder: "Start typing your text here..." }}
             style={{
-              fontSize: "16px",
-              lineHeight: "1.6",
+              fontSize: "11px",
+              lineHeight: "21px",
+              color: "#737373",
               fontFamily: "system-ui, -apple-system, sans-serif",
             }}
           />
+          {/* Bottom Status bar */}
+          <div className="flex items-center justify-between mt-3 pt-2 border-t border-zinc-100 text-[11px] text-zinc-400 font-mono shrink-0">
+            <span>PLAIN TEXT</span>
+            <div className="flex items-center gap-3">
+              <span>{chars} chars</span>
+              <span>{words} words</span>
+            </div>
+          </div>
         </Card>
 
         {/* Preview */}
-        <Card className="p-6 bg-white/60 backdrop-blur-sm border-white/20 shadow-xl">
-          <h3 className="text-xl font-bold mb-4 gradient-text">Preview</h3>
+        <Card className="p-5 bg-white border border-zinc-200/80 shadow-xs flex flex-col h-full rounded-xl overflow-hidden">
+          {/* Header with macOS controls */}
+          <div className="flex items-center justify-between mb-3 shrink-0">
+            <h3 className="text-xs font-semibold tracking-wider uppercase text-zinc-400">Preview</h3>
+            <div className="flex gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-zinc-200"></span>
+              <span className="w-2 h-2 rounded-full bg-zinc-200"></span>
+              <span className="w-2 h-2 rounded-full bg-zinc-200"></span>
+            </div>
+          </div>
           <div
-            className="h-full overflow-auto rounded-lg border-2 border-dashed border-purple-300 p-6 bg-white/50"
+            className="flex-1 overflow-y-auto rounded-lg border border-zinc-100 p-6 bg-zinc-50/50 shadow-inner"
             style={{
-              ...getTextStyle(),
+              fontFamily: "system-ui, -apple-system, sans-serif",
+              fontSize: "11px",
+              lineHeight: "21px",
+              color: "#737373",
               maxWidth: "100%",
               wordWrap: "break-word",
               whiteSpace: "pre-wrap",
             }}
           >
-            {text.split("\n").map((line, index) => (
-              <div key={index} className="min-h-[1.5em]" style={{ textAlign: style.align as any }}>
-                {line || " "}
+            {html.trim() !== "" && html !== "<br>" ? (
+              <div dangerouslySetInnerHTML={{ __html: html }} />
+            ) : (
+              <div className="flex h-full items-center justify-center text-zinc-300 italic text-sm select-none">
+                Your styled text will preview here
               </div>
-            ))}
+            )}
           </div>
         </Card>
       </div>
